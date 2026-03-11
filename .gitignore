@@ -1,0 +1,7 @@
+doc/site/
+doc/GAtor/
+site/
+__pycache__/
+*.pyc
+.DS_Store
+.env

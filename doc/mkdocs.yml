@@ -1,0 +1,111 @@
+site_name: GAtor Documentation
+site_description: "A First-Principles Genetic Algorithm for Molecular Crystal Structure Prediction"
+site_author: "Jiayi Huang, Farren Curtis, Xiayue Li, Timothy Rose"
+repo_url: https://github.com/Jiayihua2001/GAtor
+repo_name: GAtor
+copyright: "Copyright &copy; 2018-2026 Carnegie Mellon University"
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.keys
+  - pymdownx.mark
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Jiayihua2001/GAtor
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/index.md
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Project Structure: getting-started/project-structure.md
+  - User Guide:
+    - user-guide/index.md
+    - Configuration File: user-guide/configuration.md
+    - Initial Pool: user-guide/initial-pool.md
+    - Parallelization: user-guide/parallelization.md
+    - Cocrystals & Z'>1: user-guide/cocrystals.md
+    - Flexible Molecules: user-guide/flexible-molecules.md
+  - Modules:
+    - modules/index.md
+    - Optimization: modules/optimization.md
+    - Selection: modules/selection.md
+    - Crossover: modules/crossover.md
+    - Mutation: modules/mutation.md
+    - Fitness: modules/fitness.md
+    - Comparison: modules/comparison.md
+    - Clustering: modules/clustering.md
+  - Tutorials:
+    - tutorials/index.md
+    - "Tutorial 1: Rigid Molecule with MLIP": tutorials/rigid-mlip.md
+    - "Tutorial 2: Cocrystal Prediction": tutorials/cocrystal.md
+    - "Tutorial 3: Flexible Molecule": tutorials/flexible.md
+  - Reference:
+    - reference/index.md
+    - Configuration Reference: reference/config-reference.md
+    - File Formats: reference/file-formats.md
+    - FAQ & Troubleshooting: reference/faq.md
+    - Citation: reference/citation.md
