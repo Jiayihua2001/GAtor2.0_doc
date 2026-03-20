@@ -103,6 +103,7 @@ nav:
     - "Tutorial 1: Rigid Molecule with MLIP": tutorials/rigid-mlip.md
     - "Tutorial 2: Cocrystal Prediction": tutorials/cocrystal.md
     - "Tutorial 3: Flexible Molecule": tutorials/flexible.md
+    - "Tutorial 4: PXRD-Assisted Search": tutorials/pxrd-assisted.md
   - Reference:
     - reference/index.md
     - Configuration Reference: reference/config-reference.md

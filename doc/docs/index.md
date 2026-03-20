@@ -10,7 +10,7 @@ GAtor is an open-source genetic algorithm (GA) for predicting the crystal struct
 
 ### Key Features
 
-- **Multi-objective optimization** — Optimize energy, powder X-ray diffraction (PXRD) similarity, or combined fitness functions using NSGA-III
+- **Multi-objective optimization** — Optimize energy, powder X-ray diffraction (PXRD) similarity, or combined fitness functions using the VC-PWDF metric
 - **Machine-learned interatomic potentials (MLIPs)** — Native support for MACE, UMA, and AIMNet2 for fast GPU-accelerated energy evaluations
 - **DFT backends** — Full support for FHI-aims and VASP for high-accuracy calculations
 - **Cocrystal & Z' > 1 support** — Predict multi-component crystals and structures with multiple molecules in the asymmetric unit

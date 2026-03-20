@@ -112,11 +112,43 @@ export PYTHONPATH="${PYTHONPATH}:/path/to/GAtor/ibslib"
 
 ### Optional: critic2 (for PXRD fitness)
 
-If using powder X-ray diffraction (PXRD) similarity as a fitness function, install [critic2](https://aoterodelaroza.github.io/critic2/installation/):
+If using powder X-ray diffraction (PXRD) similarity as a fitness function (VC-PWDF metric), you need to build and install [critic2](https://aoterodelaroza.github.io/critic2/):
 
 ```bash
-# After building critic2:
-export PATH="/path/to/critic2/build/src:$PATH"
+# Clone critic2
+git clone https://github.com/aoterodelaroza/critic2.git
+cd critic2
+
+# Build with CMake
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+
+# Verify the build
+./src/critic2 --help
+cd ../..
+```
+
+Add critic2 to your PATH permanently:
+
+```bash
+# Add to your ~/.bashrc or ~/.bash_profile
+echo 'export PATH="/path/to/critic2/build/src:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+!!! tip "NERSC Users"
+    On Perlmutter, you may need to load CMake first: `module load cmake`.
+
+??? question "critic2 build fails with missing Fortran compiler"
+    critic2 requires a Fortran compiler. Load one with `module load gcc` or `module load PrgEnv-gnu` before building.
+
+### Optional: RDKit (for conformer generation)
+
+If using flexible molecule mode, RDKit is useful for generating conformer pools:
+
+```bash
+conda install -c conda-forge rdkit
 ```
 
 ---

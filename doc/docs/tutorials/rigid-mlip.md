@@ -15,7 +15,21 @@ This tutorial walks through a complete crystal structure prediction for a rigid 
 
 ### 1.1 Generate Initial Structures
 
-Use PyGenarris or other tools to generate random crystal structures and save them as `structures.json`:
+Use PyGenarris or other tools to generate random crystal structures, then convert to `structures.json`.
+
+GAtor provides a helper script at `example/prepare_structures.py`:
+
+```bash
+# Convert a directory of CIF files
+python /path/to/GAtor/example/prepare_structures.py /path/to/generated_cifs \
+    --output structures.json
+
+# Or from POSCAR files
+python /path/to/GAtor/example/prepare_structures.py /path/to/poscars \
+    --format poscar --output structures.json
+```
+
+Or convert manually:
 
 ```python
 from ase.io import read
@@ -30,6 +44,8 @@ for i, cif in enumerate(sorted(glob.glob("generated_structures/*.cif"))):
 with open("structures.json", "w") as f:
     json.dump(structures, f)
 ```
+
+See the [Quick Start](../getting-started/quickstart.md#generating-structuresjson) for more conversion options.
 
 ### 1.2 Create Working Directory
 
