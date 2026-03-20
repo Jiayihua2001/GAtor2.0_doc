@@ -1,5 +1,9 @@
 # GAtor
 
+<p align="center">
+  <img src="assets/images/ga.png" alt="GAtor Logo" width="300">
+</p>
+
 **A First-Principles Genetic Algorithm for Molecular Crystal Structure Prediction**
 
 <p align="center">

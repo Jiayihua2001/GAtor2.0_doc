@@ -36,6 +36,7 @@ theme:
     - content.code.annotate
     - content.tabs.link
     - toc.follow
+  logo: assets/images/ga.png
   icon:
     repo: fontawesome/brands/github
 
