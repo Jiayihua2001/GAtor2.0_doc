@@ -1,80 +1,79 @@
-# Tutorial 2: Cocrystal Prediction
+# Tutorial 3: Cocrystal Prediction
 
-This tutorial demonstrates crystal structure prediction for a binary cocrystal — two distinct molecular components packed in the same crystal lattice (e.g., an API + coformer).
+This tutorial demonstrates crystal structure prediction for the **BEDQAG** system — a 1:1 binary cocrystal with two distinct molecular components.
 
 ---
 
 ## Scenario
 
-- **System**: A 1:1 cocrystal (e.g., pharmaceutical API + coformer)
-- **Z = 4**: 2 molecules of type A + 2 molecules of type B per unit cell
+- **System**: BEDQAG — 1:1 binary cocrystal (16 + 18 atoms per molecule)
+- **Z = 2**: 2 formula units per unit cell → 4 total molecules (2 of type A + 2 of type B)
 - **Z' = 1**: One formula unit per asymmetric unit
 - **Backend**: UMA on GPU
-- **Cluster**: NERSC Perlmutter (adapt for your system)
+- **Experimental structure**: CSD entry 2123841
 
-## What You Need
+## Files
 
-| File | Description | Required? |
-|------|-------------|-----------|
-| `structures.json` | Initial cocrystal structures (ASE JSON) | Yes |
-| `ui.conf` | Configuration file | Yes |
-| `submit_gpu.sh` | SLURM submission script | Yes |
-
-## Step 1: Prepare Cocrystal Structures
-
-Your `structures.json` must contain structures with **both molecular types** and consistent atom ordering.
-
-### Atom Ordering Convention
-
-For a 1:1 cocrystal with Z=4 (2 molecules of A + 2 of B), atoms must be ordered as:
+The ready-to-run example is in `examples/03_cocrystal/BEDQAG/`:
 
 ```
-[A₁ atoms (20)][B₁ atoms (15)][A₂ atoms (20)][B₂ atoms (15)]
+03_cocrystal/
+└── BEDQAG/
+    ├── ui.conf                   # Annotated cocrystal configuration
+    ├── structures.json           # Pre-generated initial pool
+    ├── 2123841.cif               # Experimental structure
+    ├── mol_1.in                  # Molecule type A definition
+    └── mol_2.in                  # Molecule type B definition
 ```
 
-Where the numbers in parentheses are the atom count per molecule.
+## What Makes Cocrystals Different
 
-### Converting CIF Files
+| Setting | Single-Component | Cocrystal (1:1) |
+|---|---|---|
+| `crystal` | `crystal` | `co-crystal` |
+| `stoic` | (not set) | `1 1` |
+| `num_atoms` | (auto-detected) | `16 18` (per molecule type) |
+| `reorder_initial_pool` | `FALSE` | **`TRUE`** (required) |
+| `feature_vector` | `RCD` or `RSF` | **`RSF`** (required) |
+| Molecule files | `mol.in` (optional) | `mol_1.in` + `mol_2.in` |
 
-Use the helper script to convert CIF files to `structures.json`:
+### How Z and num_molecules Relate
 
-```bash
-python /path/to/GAtor/example/prepare_structures.py /path/to/cocrystal_cifs \
-    --output structures.json
-```
+For a 1:1 cocrystal with Z' = 1:
 
-Or convert manually:
+- **Z** = number of formula units per unit cell (e.g., Z=2)
+- **num_molecules** = Z × sum(stoic) = 2 × (1+1) = **4**
 
-```python
-from ase.io import read
-from ase.io.jsonio import encode
-import json, glob, os
+## Quick Start
 
-structures = {}
-for cif_file in sorted(glob.glob("cocrystal_cifs/*.cif")):
-    atoms = read(cif_file)
-    name = os.path.splitext(os.path.basename(cif_file))[0]
-    structures[name] = encode(atoms)
+1. **Copy the example**:
 
-with open("structures.json", "w") as f:
-    json.dump(structures, f)
-```
+    ```bash
+    cp -r examples/03_cocrystal/BEDQAG my_cocrystal_run
+    cd my_cocrystal_run
+    ```
 
-!!! warning "Atom Ordering"
-    If your CIF files have inconsistent atom ordering (e.g., from different structure generators), set `reorder_initial_pool = TRUE` in `[initial_pool]`. GAtor will automatically reorder atoms to match a reference molecule.
+2. **Prepare molecule files** — Create `mol_1.in` and `mol_2.in` in ASE atom format. Count atoms in each for `num_atoms`.
 
-## Step 2: Write Configuration
+3. **Run pool analysis** — Typical cocrystal SR: 0.75–0.82
 
-Create `ui.conf`. A complete example is available at `example/cocrystal/MLIP/ui.conf`:
+    ```bash
+    python examples/01_prepare/analyze_pool.py \
+        --ui-conf ui.conf --pool-path structures.json \
+        --pool-format structures_json --energy-key uma_lbfgs
+    ```
+
+4. **Edit `ui.conf`** — Update `exp_path`, `num_atoms`, and `specific_radius_proportion`
+
+5. **Submit**:
+
+    ```bash
+    sbatch submit.sh
+    ```
+
+## Configuration Walkthrough
 
 ```ini
-# ==============================================================================
-# GAtor 2.0: Cocrystal CSP with UMA
-# ==============================================================================
-# System: 1:1 binary cocrystal (e.g., API + coformer)
-# Backend: UMA MLIP on GPU
-# ==============================================================================
-
 [GAtor_master]
 fill_initial_pool = TRUE
 run_ga = TRUE
@@ -82,7 +81,6 @@ run_ga = TRUE
 [modules]
 initial_pool_module = IP_filling
 optimization_module = UMA
-spe_module = UMA
 comparison_module = structure_comparison
 selection_module = Adaptive_tournament_selection
 mutation_module = standard_mutation
@@ -97,15 +95,19 @@ energy_name = energy
 user_structures_dir = initial_pool
 stored_energy_name = uma_lbfgs
 prepare_initial_pool = TRUE
+# Reorder is CRITICAL for cocrystals — ensures consistent atom ordering
+reorder_initial_pool = TRUE
+remove_match = TRUE
+exp_path = 2123841.cif
 
 [run_settings]
 # --- Cocrystal-specific settings ---
 crystal = co-crystal
-num_molecules = 4
+num_molecules = 4                    # Z=2, stoic=1 1 → 2×(1+1)=4
 Z_prime = 1
-stoic = 1 1            # 1:1 stoichiometry (1 mol A : 1 mol B per formula unit)
-num_atoms = 20 15      # 20 atoms in molecule A, 15 in molecule B
-end_ga_structures_added = 1000
+stoic = 1 1                          # 1 mol A + 1 mol B per formula unit
+num_atoms = 16 18                    # Atoms in mol_1, mol_2 (optional, auto-detected)
+end_ga_structures_added = 200
 output_all_geometries = TRUE
 restart_replicas = TRUE
 
@@ -113,12 +115,11 @@ restart_replicas = TRUE
 parallelization_method = srun
 run_on_gpu = TRUE
 replicas_per_node = 4
-processes_per_replica = 1
-python_command = python
 
 [UMA]
 store_energy_names = uma uma_lbfgs
-relative_energy_thresholds = 3 3
+# Generous first threshold for cocrystals — relaxation changes energy significantly
+relative_energy_thresholds = 100 3
 reject_if_worst_energy = TRUE TRUE
 fmax = 0.01
 steps = 1500
@@ -128,20 +129,17 @@ save_trajectory = FALSE
 tournament_size = 10
 
 [crossover]
-crossover_probability = 0.75
+crossover_probability = 0.25         # Lower for cocrystals (more mutations)
 
 [mutation]
-stand_dev_trans = 3.0
+stand_dev_trans = 0.3                # Smaller for tighter cocrystal packing
 stand_dev_rot = 30
 stand_dev_strain = 0.3
 
 [cell_check_settings]
-# Set target_volume based on combined molecular volumes * Z
-# target_volume = 2500
 volume_upper_ratio = 1.4
 volume_lower_ratio = 0.6
-specific_radius_proportion = 0.65
-full_atomic_distance_check = 0.1
+specific_radius_proportion = 0.79    # From pool analysis for BEDQAG
 
 [pre_relaxation_comparison]
 ltol = .5
@@ -155,19 +153,20 @@ stol = .5
 angle_tol = 10
 
 [clustering]
+# RSF is REQUIRED for cocrystals — RCD does not support multi-component systems
 clustering_algorithm = AffinityPropagation
 feature_vector = RSF
 ```
 
 ### Key Cocrystal-Specific Settings
 
-| Setting | Section | Description |
-|---------|---------|-------------|
-| `crystal = co-crystal` | `[run_settings]` | Enables cocrystal mode |
-| `stoic = 1 1` | `[run_settings]` | Stoichiometry ratio (A:B) |
-| `num_atoms = 20 15` | `[run_settings]` | Atoms per molecule type |
-| `Z_prime = 1` | `[run_settings]` | Formula units per asymmetric unit |
-| `num_molecules = 4` | `[run_settings]` | Total molecules in unit cell (= sum(stoic) * Z) |
+| Setting | Value | Why |
+|---|---|---|
+| `crystal = co-crystal` | Enables cocrystal mode | Stoichiometry-preserving operators |
+| `stoic = 1 1` | 1:1 stoichiometry | Auto-detected from `mol_1.in` / `mol_2.in` |
+| `num_atoms = 16 18` | Atoms per molecule type | Auto-detected if not set |
+| `reorder_initial_pool = TRUE` | Required | Ensures consistent atom grouping |
+| `feature_vector = RSF` | Required | RCD does not support multi-component |
 
 ### Crossover Options
 
@@ -184,67 +183,12 @@ GAtor provides two crossover modes for cocrystals:
 
 === "Dimer Crossover"
 
-    Treats molecular dimers (A-B pairs) as single units during crossover. Can be useful when the intermolecular interaction between A and B is the dominant packing force.
+    Treats molecular dimers (A-B pairs) as single units. Useful when the A-B intermolecular interaction is the dominant packing force.
 
     ```ini
     [modules]
     crossover_module = crossover_dimers
     ```
-
-## Step 3: Write SLURM Script
-
-Create `submit_gpu.sh` (see `example/cocrystal/MLIP/submit_gpu.sh`):
-
-```bash
-#!/bin/bash
-#SBATCH -N 1
-#SBATCH --time=04:00:00
-#SBATCH -C gpu
-#SBATCH --gpus-per-node=4
-#SBATCH -q regular
-#SBATCH -A your_account
-#SBATCH -J gator_cocrystal
-#SBATCH -o gator_%j.out
-#SBATCH -e gator_%j.err
-
-ulimit -s unlimited
-ulimit -v unlimited
-
-conda activate gator
-python /path/to/GAtor/gator/GAtor_master.py ui.conf
-```
-
-## Step 4: Submit and Monitor
-
-```bash
-sbatch submit_gpu.sh
-
-# Monitor progress
-tail -f GAtor.log
-
-# Check energy hierarchy
-cat tmp/energy_hierarchy_*.dat
-```
-
-## Step 5: Analyze Results
-
-GAtor automatically handles cocrystal-specific processing during the run:
-
-1. **Molecule extraction** — Extracts reference geometries `mol_1.in` and `mol_2.in` from the initial pool
-2. **ASU partner swap** — Ensures consistent molecule labeling across all structures
-3. **Stoichiometry preservation** — Maintains the correct A:B ratio during crossover and mutation
-
-Results are in the same format as single-component runs:
-
-```bash
-# Ranked structures by energy
-head -20 tmp/energy_hierarchy_*.dat
-
-# Structure pool
-ls tmp/pool_0/
-```
-
----
 
 ## Z' > 1 (Single Component)
 
@@ -253,7 +197,7 @@ For single-component systems with Z' > 1 (multiple symmetry-independent molecule
 ```ini
 [run_settings]
 crystal = co-crystal
-num_molecules = 8       # e.g., Z'=2 with Z=4 → 8 molecules
+num_molecules = 8       # Z'=2 with Z=4 → 8 molecules
 Z_prime = 2
 stoic = 1               # Single component
 num_atoms = 30           # Atoms per molecule
@@ -266,10 +210,21 @@ This allows GAtor to treat each symmetry-independent molecule separately during 
 ## Tips
 
 !!! tip "Volume Estimation"
-    For cocrystals, the target volume should account for both molecular types. If you omit `target_volume`, GAtor estimates it from the initial structures. For manual estimation: `target_volume ≈ (V_mol_A + V_mol_B) * Z / stoic_sum`.
+    For cocrystals, the target volume accounts for both molecular types. If you omit `target_volume`, GAtor estimates it from the initial structures. For manual estimation: `target_volume ≈ (V_mol_A + V_mol_B) × Z / stoic_sum`.
+
+!!! tip "Rejection Rate"
+    If the GA rejects too many structures, lower `specific_radius_proportion` or widen `volume_upper_ratio` / `volume_lower_ratio`.
 
 !!! tip "Stoichiometry"
-    The `stoic` setting defines the ratio, not absolute counts. For a 2:1 cocrystal (e.g., 2 API + 1 coformer per formula unit), use `stoic = 2 1` with `num_molecules = 6` (for Z'=1, Z=2).
+    The `stoic` setting defines the ratio, not absolute counts. For a 2:1 cocrystal (2 API + 1 coformer), use `stoic = 2 1` with `num_molecules = 6` (for Z'=1, Z=2).
 
 !!! tip "Restart"
-    If the job times out, resubmit with `restart_replicas = TRUE`. GAtor resumes from the existing pool and maintains all cocrystal metadata.
+    If the job times out, resubmit — GAtor resumes from the existing pool and maintains all cocrystal metadata.
+
+---
+
+## Next Steps
+
+- [Tutorial 4: Flexible Molecule](flexible.md) — Conformational flexibility
+- [Tutorial 5: PXRD-Assisted Search](pxrd-assisted.md) — Add PXRD guidance
+- [Tutorial 6: Post-Analysis](post-analysis.md) — Analyze results

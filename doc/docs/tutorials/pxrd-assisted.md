@@ -1,71 +1,80 @@
-# Tutorial 4: PXRD-Assisted Search
+# Tutorial 5: PXRD-Assisted Search
 
-This tutorial demonstrates how to use experimental powder X-ray diffraction (PXRD) data to guide the crystal structure prediction, combining energy and PXRD similarity in a multi-objective fitness function.
+This tutorial demonstrates how to use experimental powder X-ray diffraction (PXRD) data to guide the crystal structure prediction, combining energy and PXRD similarity in a multi-objective fitness function. It also covers **post-GA fine-tuning** of candidate structures.
 
 ---
 
 ## Scenario
 
-- **System**: A rigid organic molecule with known experimental PXRD pattern
+- **System**: Uracil — rigid molecule with known experimental PXRD pattern
 - **Z = 4**: 4 molecules per unit cell
 - **Backend**: UMA on GPU
 - **Fitness**: Combined energy + PXRD similarity (VC-PWDF metric)
 - **Requires**: [critic2](https://aoterodelaroza.github.io/critic2/) installed and in PATH
 
-## When to Use PXRD-Assisted Search
+## Files
 
-PXRD-assisted search is useful when:
+```
+05_pxrd_assisted/
+├── Uracil/                       # PXRD-assisted GA run
+│   ├── ui.conf                   # PXRD-guided configuration
+│   ├── structures.json           # Initial pool
+│   ├── uracil-lqlt.xy           # Experimental PXRD pattern
+│   └── 1278441.cif              # Experimental structure
+└── fine-tune/                    # Post-GA PXRD refinement
+    ├── README.md
+    ├── ui.conf                   # Fine-tune configuration
+    ├── uracil-lqlt.xy           # Same experimental pattern
+    └── initial_pool/             # Candidate structures from GA
+```
+
+## When to Use PXRD-Assisted Search
 
 - You have an **experimental PXRD pattern** but no solved crystal structure
 - You want to **bias the search** toward structures matching the experimental pattern
 - You want to identify which predicted structures match the experiment
 
-!!! note "critic2 Required"
-    The PXRD similarity calculation uses the **VC-PWDF** (Variable-Cell Powder Difference) metric implemented via [critic2](https://aoterodelaroza.github.io/critic2/). See the [Installation Guide](../getting-started/installation.md#optional-critic2-for-pxrd-fitness) for setup instructions.
+!!! note "Prerequisites"
+    1. **critic2** installed and on PATH — verify with `which critic2`
+    2. Experimental PXRD pattern (`.xy` file: two-column, 2θ vs intensity)
+    3. Experimental unit cell parameters (a, b, c, α, β, γ)
 
-## What You Need
+## How It Works
 
-| File | Description | Required? |
-|------|-------------|-----------|
-| `structures.json` | Initial crystal structures (ASE JSON) | Yes |
-| `experimental.xy` | Experimental PXRD pattern (2θ vs intensity) | Yes |
-| `experimental.cif` | Experimental structure (for removing matches) | Optional |
-| `ui.conf` | Configuration file | Yes |
-| `submit_gpu.sh` | SLURM submission script | Yes |
+The fitness function blends energy and PXRD similarity:
 
-## Step 1: Prepare PXRD Data
+$$F = (1 - \lambda) \cdot F_{\text{energy}} + \lambda \cdot F_{\text{PXRD}}$$
 
-### Experimental PXRD Pattern
+where λ is the `pxrd_scaling_factor`.
 
-The experimental PXRD pattern should be in a two-column `.xy` format (2θ in degrees, intensity):
+## PXRD File Format
+
+Two-column `.xy` file (no header, whitespace-separated):
 
 ```
 5.000  12.3
 5.010  13.1
 5.020  14.8
 ...
-50.000  5.2
+40.000  5.2
 ```
 
-### Cell Parameters
+Column 1: 2θ (degrees). Column 2: intensity (arbitrary units, normalized internally).
 
-You also need the **experimental unit cell parameters** for the VC-PWDF calculation:
+## Choosing `pxrd_scaling_factor`
 
-```
-a  b  c  alpha  beta  gamma
-```
+| Value | Behavior | Use Case |
+|---|---|---|
+| `0.00` | Pure energy | Baseline comparison |
+| `0.10–0.25` | Gentle PXRD guidance | Noisy or low-resolution data |
+| `0.25–0.50` | Balanced | General-purpose |
+| `0.50–0.75` | PXRD-dominant | High-quality data |
+| **`0.90`** | **Strong PXRD bias (recommended)** | **Production runs** |
+| `1.00` | Pure PXRD | Not recommended (no energy regularization) |
 
-These are typically available from indexing the PXRD pattern.
-
-## Step 2: Write Configuration
-
-The key difference from a standard energy-only run is using the `vc_energy_fitness` module:
+## Configuration Walkthrough
 
 ```ini
-# ==============================================================================
-# GAtor 2.0: PXRD-Assisted CSP with UMA
-# ==============================================================================
-
 [GAtor_master]
 fill_initial_pool = TRUE
 run_ga = TRUE
@@ -73,46 +82,46 @@ run_ga = TRUE
 [modules]
 initial_pool_module = IP_filling
 optimization_module = UMA
-spe_module = UMA
 comparison_module = structure_comparison
 selection_module = Adaptive_tournament_selection
 mutation_module = standard_mutation
 crossover_module = symmetric_crossover
 clustering_module = cluster
-fitness_module = vc_energy_fitness          # <-- Multi-objective fitness
+# vc_energy_fitness enables PXRD-guided multi-objective fitness
+fitness_module = vc_energy_fitness
 
 [fitness]
 energy_name = energy
-pxrd_file = /path/to/experimental.xy       # <-- Experimental PXRD pattern
-pxrd_cell = 10.37 12.61 13.85 90 90.27 90  # <-- a b c alpha beta gamma
-pxrd_scaling_factor = 0.25                  # <-- Weight of PXRD similarity (0-1)
+# Path to experimental PXRD pattern
+pxrd_file = uracil-lqlt.xy
+# Experimental unit cell: a b c alpha beta gamma
+pxrd_cell = 3.6691 10.3146 12.3958 90 90 96.637
+# Weight of PXRD similarity in fitness (0.0–1.0)
+pxrd_scaling_factor = 0.90
 
 [initial_pool]
 user_structures_dir = initial_pool
 stored_energy_name = uma_lbfgs
-stored_vc_name = vc_similarity             # <-- Store PXRD similarity scores
+stored_pwdf_name = vc_similarity
 prepare_initial_pool = TRUE
-remove_match = TRUE                         # <-- Remove known experimental matches
-exp_path = /path/to/experimental.cif        # <-- Experimental structure
+remove_match = TRUE
+exp_path = ./1278441.cif
 
 [run_settings]
 num_molecules = 4
-num_atoms = 53
-end_ga_structures_added = 1000
+end_ga_structures_added = 200
 output_all_geometries = TRUE
-restart_replicas = TRUE
 
 [parallel_settings]
 parallelization_method = srun
-run_on_gpu = TRUE
 replicas_per_node = 4
-processes_per_replica = 1
-python_command = python
+run_on_gpu = TRUE
 
 [UMA]
 store_energy_names = uma uma_lbfgs
-relative_energy_thresholds = 3 3
-reject_if_worst_energy = TRUE TRUE
+# Both thresholds generous — fitness depends on PXRD match, not just energy
+relative_energy_thresholds = 1000 1000
+reject_if_worst_energy = FALSE FALSE
 fmax = 0.01
 steps = 1500
 save_trajectory = FALSE
@@ -124,16 +133,14 @@ tournament_size = 10
 crossover_probability = 0.75
 
 [mutation]
-stand_dev_trans = 3.0
+stand_dev_trans = 0.3
 stand_dev_rot = 30
 stand_dev_strain = 0.3
 
 [cell_check_settings]
-target_volume = 1791.81
 volume_upper_ratio = 1.4
 volume_lower_ratio = 0.6
-specific_radius_proportion = 0.65
-full_atomic_distance_check = 0.1
+specific_radius_proportion = 0.79
 
 [pre_relaxation_comparison]
 ltol = .5
@@ -154,56 +161,140 @@ feature_vector = RSF
 ### Key PXRD-Specific Settings
 
 | Setting | Section | Description |
-|---------|---------|-------------|
+|---|---|---|
 | `fitness_module = vc_energy_fitness` | `[modules]` | Enables multi-objective fitness |
 | `pxrd_file` | `[fitness]` | Path to experimental PXRD `.xy` file |
 | `pxrd_cell` | `[fitness]` | Experimental cell parameters: `a b c α β γ` |
-| `pxrd_scaling_factor` | `[fitness]` | Weight of PXRD similarity (0 = energy only, 1 = PXRD only) |
-| `stored_vc_name` | `[initial_pool]` | Property name for storing PXRD similarity scores |
-| `remove_match` | `[initial_pool]` | Remove structures matching experimental CIF |
-| `exp_path` | `[initial_pool]` | Path to experimental CIF for match removal |
+| `pxrd_scaling_factor` | `[fitness]` | Weight of PXRD similarity (0–1) |
+| `stored_pwdf_name` | `[initial_pool]` | Property name for PXRD similarity scores |
 
-### Choosing `pxrd_scaling_factor`
+!!! important "Energy Thresholds for PXRD Mode"
+    Both `relative_energy_thresholds` are set to `1000` because the fitness function depends on PXRD similarity, not just energy. Tight thresholds would reject structures that match the experimental PXRD but are not the lowest in energy.
 
-The combined fitness is:
+## Combining with Other Crystal Types
 
-$$F = (1 - \lambda) \cdot F_{\text{energy}} + \lambda \cdot F_{\text{PXRD}}$$
+PXRD guidance is an overlay — add it to any crystal type:
 
-| Value | Effect |
-|-------|--------|
-| `0.0` | Pure energy optimization (no PXRD influence) |
-| `0.1–0.3` | Mild PXRD bias — energy dominates, PXRD breaks ties |
-| `0.25` | **Recommended starting point** |
-| `0.5` | Equal weight to energy and PXRD similarity |
-| `0.7–1.0` | Strong PXRD bias — useful when the experimental pattern is high-quality |
+| Crystal Type | Additional Settings |
+|---|---|
+| Rigid | None (default) |
+| Flexible | `flexible = TRUE` + `[conformer]` section |
+| Cocrystal | `crystal = co-crystal` + stoichiometry settings |
 
-## Step 3: Submit and Monitor
+---
+
+## Post-GA Fine-Tuning
+
+<p align="center">
+  <img src="../assets/images/fine_tune.png" alt="Fine-Tune Workflow" width="400">
+</p>
+
+After the GA completes, you can refine the best candidates against the experimental PXRD pattern using **local mutations**. This is done with the fine-tune mode.
+
+### How Fine-Tuning Works
+
+1. Load candidate structures from a completed GA run
+2. Calculate VC-PWDF score for each (lower = better match)
+3. For each generation:
+    - Select the best-matching structure (greedy)
+    - Generate N small mutations (translations, rotations, strains)
+    - Evaluate VC-PWDF in parallel (multiprocessing)
+    - Keep improvements, replace duplicates if better
+4. Output structures ranked by PXRD similarity
+
+### Fine-Tune Configuration
+
+```ini
+[GAtor_master]
+fill_initial_pool = FALSE
+run_ga = FALSE
+fine_tune = TRUE                     # Enable fine-tune mode
+
+[modules]
+optimization_module = UMA
+# Other modules remain the same
+
+[fitness]
+energy_name = energy
+pxrd_file = uracil-lqlt.xy
+pxrd_cell = 3.6691 10.3146 12.3958 90 90 96.637
+
+[initial_pool]
+user_structures_dir = ./initial_pool
+stored_energy_name = uma_lbfgs
+stored_vc_name = vc_similarity
+prepare_initial_pool = FALSE
+
+[run_settings]
+crystal = crystal
+num_molecules = 4
+end_ga_structures_added = 100
+output_all_geometries = TRUE
+
+[parallel_settings]
+parallelization_method = serial
+
+[fine_tune]
+# CPU processes for parallel PXRD calculations
+num_processes = 128
+# Mutation trials per generation
+num_trial = 100
+# PXRD evaluations per mutated structure
+num_ga_structures = 20
+# Maximum generations before stopping
+max_generations = 1000
+# Stop after N generations without improvement
+max_no_improvement = 20
+# Duplicate detection (tight tolerances for fine-tuning)
+tight_ltol = 0.1
+tight_stol = 0.15
+tight_angle_tol = 3.0
+# Convergence
+vc_improvement_threshold = 0.01
+max_recursive_iterations = 5
+
+[mutation]
+# Small perturbations for local refinement
+stand_dev_trans = 0.05
+stand_dev_rot = 5
+stand_dev_strain = 0.05
+stand_dev_cell_angle = 2.0
+torsion_sigma = 5.0
+specific_mutations = Rand_trans Rand_rot Frame_trans Frame_rot Rand_strain Sym_strain Vol_strain Angle_strain Symm_rot Symm_trans Torsion_angle Phonon_mode
+```
+
+### Fine-Tune Key Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `num_processes` | 4 | CPU processes for parallel PXRD evaluation |
+| `num_trial` | 20 | Mutation trials per generation |
+| `max_generations` | 100 | Maximum fine-tune generations |
+| `max_no_improvement` | 10 | Stop after N generations without improvement |
+| `stand_dev_trans` | 0.05 | Translation perturbation (much smaller than GA) |
+| `stand_dev_rot` | 5 | Rotation perturbation (much smaller than GA) |
+
+### Running the Fine-Tune
 
 ```bash
-sbatch submit_gpu.sh
+# Prepare candidate structures from GA output
+python examples/01_prepare/prepare_structures.py /path/to/ga_output_cifs \
+    --output structures.json
 
-# Monitor progress
-tail -f GAtor.log
-
-# Check energy hierarchy (now includes PXRD similarity)
-cat tmp/energy_hierarchy_*.dat
+# Run fine-tuning (CPU, no GPU needed)
+run_gator ui.conf
 ```
 
-## Step 4: Analyze Results
+### Fine-Tune Output
 
-The energy hierarchy file now includes PXRD similarity scores alongside energies. Higher VC-PWDF similarity (closer to 1.0) indicates a better match to the experimental pattern.
+Structures are named with their PWDF score:
 
-```python
-import json
-
-# Load pool structures
-with open("tmp/pool_0/structure_001.json") as f:
-    struct = json.load(f)
-
-# Access PXRD similarity
-print(f"Energy: {struct['properties']['energy']}")
-print(f"VC similarity: {struct['properties']['vc_similarity']}")
 ```
+best_pwdf_0.031637_struct_04dbd973f5.cif
+best_pwdf_0.045123_struct_a1b2c3d4e5.cif
+```
+
+Lower PWDF = better match to the experimental pattern. Values below **0.05** indicate very good agreement.
 
 ---
 
@@ -216,8 +307,21 @@ print(f"VC similarity: {struct['properties']['vc_similarity']}")
     critic2 --help
     ```
 
-!!! tip "PXRD Pattern Quality"
-    The quality of PXRD-assisted search depends heavily on the experimental pattern. Ensure your `.xy` file covers sufficient 2θ range (typically 5–50°) and has good signal-to-noise ratio.
+!!! tip "Thread Control"
+    Set `OMP_NUM_THREADS=1` to avoid thread conflicts between MLIP and critic2.
 
-!!! tip "Iterative Approach"
-    Start with `pxrd_scaling_factor = 0.0` (pure energy) to establish the energy landscape, then increase to 0.25 in a second run to incorporate PXRD guidance.
+!!! tip "PXRD Pattern Quality"
+    Ensure your `.xy` file covers sufficient 2θ range (typically 5–50°) and has good signal-to-noise ratio.
+
+!!! tip "Two-Stage Workflow"
+    For best results, run energy-only GA first to establish the energy landscape, then PXRD-assisted for refinement. Use the fine-tune mode as a final local optimization step.
+
+!!! tip "Fine-Tune Runtime"
+    Runtime is dominated by critic2 (PXRD calculation), not structure manipulation. More `num_processes` = faster, but watch memory.
+
+---
+
+## Next Steps
+
+- [Tutorial 6: Post-Analysis](post-analysis.md) — Convergence plots and structure extraction
+- [Tutorial 7: CSP Landscape Viewer](csp-viewer.md) — Interactive analysis

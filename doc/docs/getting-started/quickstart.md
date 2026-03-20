@@ -1,6 +1,6 @@
 # Quick Start
 
-This guide walks you through running your first GAtor crystal structure prediction using the UMA machine-learning potential on a GPU cluster.
+This guide walks you through running your first GAtor crystal structure prediction.
 
 ---
 
@@ -11,7 +11,7 @@ This guide walks you through running your first GAtor crystal structure predicti
 
 ## Preparation Checklist
 
-Before running GAtor, ensure you have the following inputs ready. The exact requirements depend on your system type:
+Before running GAtor, ensure you have the following inputs ready:
 
 ### Required for All Runs
 
@@ -27,161 +27,69 @@ Before running GAtor, ensure you have the following inputs ready. The exact requ
 
 === "Flexible Molecule"
 
-    - [x] **`conformer.json`** — Pre-computed molecular conformer pool (see [Conformer Preparation](#preparing-a-conformer-pool))
+    - [x] **`conformers.json`** — Pre-computed molecular conformer pool (see [Tutorial 4](../tutorials/flexible.md))
 
 === "Cocrystal"
 
     - [x] Structures in `structures.json` must contain **both molecular types** with consistent atom ordering
     - [x] `stoic` and `num_atoms` must be set in `[run_settings]`
+    - [x] `mol_1.in` and `mol_2.in` — Molecule definition files (auto-extracted if `remove_match = TRUE`)
 
 ### Optional
 
 - [ ] **Experimental CIF** — For removing known structures from the pool (`remove_match = TRUE`)
 - [ ] **Experimental PXRD pattern** (`.xy` file) — For PXRD-assisted fitness (`fitness_module = vc_energy_fitness`)
 - [ ] **critic2** — Required only if using PXRD fitness (see [Installation](installation.md#optional-critic2-for-pxrd-fitness))
-- [ ] **RDKit** — Useful for generating conformer pools (see [Installation](installation.md#optional-rdkit-for-conformer-generation))
 
 ---
 
-## Step 1: Prepare Your Working Directory
+## Step 1: Prepare the Initial Pool
 
-Create a fresh directory for your prediction run:
+GAtor needs an initial set of crystal structures. We recommend generating the initial pool from [Genarris 3.0](https://github.com/Yi5817/Genarris). For other sources, use the provided helper script:
 
 ```bash
-mkdir my_first_run && cd my_first_run
+# From CIF files
+python examples/01_prepare/prepare_structures.py /path/to/cif_directory --output structures.json
+
+# From POSCAR files
+python examples/01_prepare/prepare_structures.py /path/to/poscar_directory --format poscar --output structures.json
+
+# From Genarris output (already in ASE JSON format)
+python examples/01_prepare/prepare_structures.py genarris_output.json --format genarris --output structures.json
 ```
-
-## Step 2: Prepare the Initial Pool
-
-GAtor needs an initial set of crystal structures. Provide a `structures.json` file containing ASE Atoms objects in JSON format.
-
-### Generating `structures.json`
-
-You can generate initial structures using **PyGenarris** (included with GAtor), the **CSD**, or other tools, then convert them:
-
-=== "From CIF files"
-
-    Use the helper script provided in `example/prepare_structures.py`:
-
-    ```bash
-    python /path/to/GAtor/example/prepare_structures.py /path/to/cif_directory --output structures.json
-    ```
-
-    Or manually:
-
-    ```python
-    from ase.io import read
-    from ase.io.jsonio import encode
-    import json, glob, os
-
-    structures = {}
-    for cif_file in sorted(glob.glob("my_cifs/*.cif")):
-        atoms = read(cif_file)
-        name = os.path.splitext(os.path.basename(cif_file))[0]
-        structures[name] = encode(atoms)
-
-    with open("structures.json", "w") as f:
-        json.dump(structures, f)
-    ```
-
-=== "From POSCAR files"
-
-    ```bash
-    python /path/to/GAtor/example/prepare_structures.py /path/to/poscar_directory \
-        --format poscar --output structures.json
-    ```
-
-=== "From PyGenarris"
-
-    If you used Genarris 3.0, the output is already in ASE JSON format:
-
-    ```bash
-    python /path/to/GAtor/example/prepare_structures.py genarris_output.json \
-        --format genarris --output structures.json
-    ```
 
 !!! tip "What is `structures.json`?"
-    This file is a JSON dictionary mapping structure IDs to ASE Atoms objects serialized via `ase.io.jsonio.encode()`. GAtor will read, optimize, and filter these structures to form the initial pool.
+    A JSON dictionary mapping structure IDs to ASE Atoms objects serialized via `ase.io.jsonio.encode()`. GAtor reads, optimizes, and filters these structures to form the initial pool.
 
-### Preparing a Conformer Pool
+## Step 2: Pool Analysis — Determine SR
 
-**Required only for flexible molecule runs** (`flexible = TRUE` in `[run_settings]`).
+The **specific radius proportion** (SR) controls how close atoms from different molecules are allowed to be. This is the most critical parameter to get right.
 
-A conformer pool is a set of molecular geometries representing different low-energy conformations. GAtor uses this pool for conformer mutation and torsion angle crossover operators.
+!!! important "Getting SR Right"
+    Too high → rejects valid structures → slow convergence.
+    Too low → accepts unphysical structures → wasted computation.
 
-=== "Using RDKit (Recommended)"
+Run the pool analysis:
 
-    Use the helper script provided in `example/flexible/prepare_conformers.py`:
-
-    ```bash
-    python /path/to/GAtor/example/flexible/prepare_conformers.py molecule.sdf \
-        --num_conformers 200 --output conformer.json
-    ```
-
-    This generates conformers using RDKit's ETKDG method and saves them in ASE JSON format.
-
-=== "Using CREST"
-
-    Run CREST to generate conformers, then convert the output:
-
-    ```python
-    from ase.io import read
-    from ase.io.jsonio import encode
-    import json
-
-    # CREST outputs conformers in crest_conformers.xyz
-    conformers = {}
-    atoms_list = read("crest_conformers.xyz", index=":")
-    for i, atoms in enumerate(atoms_list):
-        conformers[f"conf_{i:03d}"] = encode(atoms)
-
-    with open("conformer.json", "w") as f:
-        json.dump(conformers, f)
-    ```
-
-=== "Manual"
-
-    Any set of molecular geometries in XYZ/SDF format can be converted:
-
-    ```python
-    from ase.io import read
-    from ase.io.jsonio import encode
-    import json
-
-    conformers = {}
-    for i, xyz_file in enumerate(sorted(xyz_files)):
-        atoms = read(xyz_file)
-        conformers[f"conf_{i:03d}"] = encode(atoms)
-
-    with open("conformer.json", "w") as f:
-        json.dump(conformers, f)
-    ```
-
-!!! important "Conformer Diversity"
-    Aim for 50–200 conformers covering distinct torsion angle combinations. GAtor will de-duplicate conformers using the `rmsd_threshold` parameter.
-
-### Preparing Cocrystal Structures
-
-**Required only for cocrystal runs** (`crystal = co-crystal` in `[run_settings]`).
-
-Structures in `structures.json` must contain **both molecular types** with consistent atom ordering. For a 1:1 cocrystal with Z=4 (2 molecules of type A + 2 of type B):
-
-```
-Atoms order: [A₁ atoms][B₁ atoms][A₂ atoms][B₂ atoms]
+```bash
+python examples/01_prepare/analyze_pool.py \
+    --ui-conf ui.conf \
+    --pool-path ./structures.json \
+    --pool-format structures_json \
+    --energy-key <energy-key> \
+    --output-dir pool_analysis_results \
+    --exp-file /path/to/experimental.cif   # optional
 ```
 
-Set the per-molecule atom counts in `ui.conf`:
+Then auto-recommend SR:
 
-```ini
-[run_settings]
-crystal = co-crystal
-num_molecules = 4
-stoic = 1 1          # 1:1 stoichiometry
-num_atoms = 20 15    # 20 atoms in mol A, 15 atoms in mol B
+```bash
+python examples/01_prepare/recommend_sr.py pool_analysis_results/pool_analysis.csv
 ```
 
-!!! tip "Atom Reordering"
-    If your input structures have inconsistent atom ordering, set `reorder_initial_pool = TRUE` in `[initial_pool]` to let GAtor fix it automatically.
+**Rule of thumb**: Pick the SR where ~80% of the pool passes. Typical values: 0.75–0.82.
+
+See the [Setup & Preparation Tutorial](../tutorials/setup.md) for a detailed walkthrough.
 
 ## Step 3: Create a Configuration File
 
@@ -189,8 +97,7 @@ Create a `ui.conf` file. Here is a minimal example for a rigid molecule with UMA
 
 ```ini
 [GAtor_master]
-fill_initial_pool = TRUE
-run_ga = TRUE
+analyze_initial_pool = TRUE
 
 [modules]
 initial_pool_module = IP_filling
@@ -209,43 +116,42 @@ energy_name = energy
 user_structures_dir = initial_pool
 stored_energy_name = uma_lbfgs
 prepare_initial_pool = TRUE
+remove_match = TRUE
+exp_path = ./experimental.cif
 
 [run_settings]
 num_molecules = 4
-end_ga_structures_added = 500
+end_ga_structures_added = 200
 output_all_geometries = TRUE
-restart_replicas = TRUE
 
 [parallel_settings]
 parallelization_method = srun
 run_on_gpu = TRUE
 replicas_per_node = 4
-processes_per_replica = 1
-python_command = python
 
 [UMA]
 store_energy_names = uma uma_lbfgs
-relative_energy_thresholds = 3 3
-reject_if_worst_energy = TRUE TRUE
+relative_energy_thresholds = 1000 3
+reject_if_worst_energy = FALSE FALSE
 fmax = 0.01
 steps = 1500
+save_trajectory = FALSE
 
 [selection]
 tournament_size = 10
 
 [crossover]
-crossover_probability = 0.75
+crossover_probability = 0.25
 
 [mutation]
-stand_dev_trans = 3.0
+stand_dev_trans = 0.3
 stand_dev_rot = 30
 stand_dev_strain = 0.3
 
 [cell_check_settings]
 volume_upper_ratio = 1.4
 volume_lower_ratio = 0.6
-specific_radius_proportion = 0.65
-full_atomic_distance_check = 0.1
+specific_radius_proportion = 0.75
 
 [pre_relaxation_comparison]
 ltol = .5
@@ -263,31 +169,62 @@ clustering_algorithm = AffinityPropagation
 feature_vector = RSF
 ```
 
-!!! note "Volume Estimation"
-    If you omit `target_volume` from `[cell_check_settings]`, GAtor will automatically estimate it from the molecular geometry.
+!!! tip "Full Template"
+    A comprehensive template with all options is available at `examples/00_setup/ui_template.conf`.
 
 ## Step 4: Create a SLURM Submission Script
 
-```bash
-#!/bin/bash
-#SBATCH -N 1
-#SBATCH --time=02:00:00
-#SBATCH -C gpu
-#SBATCH --gpus-per-node=4
-#SBATCH -q regular
-#SBATCH -A your_account
-#SBATCH -J gator_run
+=== "GPU (MLIP: UMA, MACE, AIMNet2)"
 
-ulimit -s unlimited
-ulimit -v unlimited
+    ```bash
+    #!/bin/bash
+    #SBATCH -N 2                          # GPU nodes (2 nodes = 8 replicas)
+    #SBATCH --time=12:00:00
+    #SBATCH -C gpu
+    #SBATCH --gpus-per-node=4
+    #SBATCH -q regular
+    #SBATCH -A your_allocation            # <- UPDATE
+    #SBATCH -J gator_mlip
 
-# Activate environment
-conda activate gator
-# Or: source /path/to/your/env_file.sh
+    export SLURM_OVERLAP=1
+    export OMP_NUM_THREADS=1
+    export MKL_NUM_THREADS=1
+    export NUMEXPR_NUM_THREADS=1
+    export HF_HUB_OFFLINE=1
 
-# Launch GAtor
-python /path/to/GAtor/gator/GAtor_master.py ui.conf
-```
+    ulimit -s unlimited
+    ulimit -v unlimited
+
+    # module load ...                     # <- Load your MPI module
+    # conda activate gator                # <- Activate environment
+
+    run_gator ui.conf
+    ```
+
+=== "CPU (DFT: FHI-aims, VASP)"
+
+    ```bash
+    #!/bin/bash
+    #SBATCH -N 2                          # CPU nodes
+    #SBATCH --time=48:00:00
+    #SBATCH -C cpu
+    #SBATCH -q regular
+    #SBATCH -A your_allocation            # <- UPDATE
+    #SBATCH -J gator_dft
+
+    export SLURM_OVERLAP=1
+    export OMP_NUM_THREADS=1
+    export MKL_NUM_THREADS=1
+    export NUMEXPR_NUM_THREADS=1
+
+    ulimit -s unlimited
+    ulimit -v unlimited
+
+    # module load ...                     # <- Load your MPI module
+    # conda activate gator                # <- Activate environment
+
+    run_gator ui.conf
+    ```
 
 ## Step 5: Submit and Monitor
 
@@ -298,23 +235,24 @@ sbatch submit.sh
 # Monitor progress
 tail -f GAtor.log
 
-# Check the energy hierarchy
-cat tmp/energy_hierarchy_*.dat
+# Check how many structures have been added
+wc -l tmp/energy_hierarchy_*.dat
 ```
 
 ## Step 6: Analyze Results
 
-After the GA completes, your results are in the `tmp/` directory:
+After the GA completes, your results are in the working directory:
 
 ```
-my_first_run/
+my_run/
 ├── ui.conf                          # Your configuration
 ├── structures.json                  # Input structures
 ├── initial_pool/                    # Optimized initial structures
+├── structures/                      # Full structure details + metadata
 ├── tmp/
 │   ├── energy_hierarchy_*.dat       # Ranked structures by energy
-│   ├── pool_0/                      # Structure pool (JSON files)
-│   ├── initial_pool_space_groups.json
+│   ├── exp_match_record.dat         # Experimental match tracking
+│   ├── xtal_fitness.json            # Fitness values per structure
 │   └── ...
 ├── GAtor.log                        # Main log file
 └── output/                          # Replica outputs
@@ -322,10 +260,16 @@ my_first_run/
 
 The lowest-energy structures in `energy_hierarchy_*.dat` are your best predictions.
 
+See the [Post-Analysis Tutorial](../tutorials/post-analysis.md) for convergence plots, structure extraction, and visualization.
+
 ---
 
 ## What's Next?
 
-- [Configuration Guide](../user-guide/configuration.md) — Understand every section of `ui.conf`
-- [Tutorials](../tutorials/index.md) — Step-by-step examples for different scenarios
-- [Parallelization](../user-guide/parallelization.md) — Scale to multi-node runs
+| | |
+|---|---|
+| [**Setup & Preparation**](../tutorials/setup.md) | Detailed pool preparation and SR analysis |
+| [**Tutorials**](../tutorials/index.md) | Step-by-step examples for every crystal type |
+| [**Configuration Guide**](../user-guide/configuration.md) | Understand every section of `ui.conf` |
+| [**Parallelization**](../user-guide/parallelization.md) | Scale to multi-node runs |
+| [**Post-Analysis**](../tutorials/post-analysis.md) | Analyze and visualize your results |

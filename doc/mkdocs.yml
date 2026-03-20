@@ -63,12 +63,17 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.keys
   - pymdownx.mark
+  - pymdownx.arithmatex:
+      generic: true
   - admonition
   - attr_list
   - md_in_html
   - tables
   - toc:
       permalink: true
+
+extra_javascript:
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 extra:
   social:
@@ -100,10 +105,13 @@ nav:
     - Clustering: modules/clustering.md
   - Tutorials:
     - tutorials/index.md
-    - "Tutorial 1: Rigid Molecule with MLIP": tutorials/rigid-mlip.md
-    - "Tutorial 2: Cocrystal Prediction": tutorials/cocrystal.md
-    - "Tutorial 3: Flexible Molecule": tutorials/flexible.md
-    - "Tutorial 4: PXRD-Assisted Search": tutorials/pxrd-assisted.md
+    - "Tutorial 1: Setup & Preparation": tutorials/setup.md
+    - "Tutorial 2: Rigid Molecule with MLIP": tutorials/rigid-mlip.md
+    - "Tutorial 3: Cocrystal Prediction": tutorials/cocrystal.md
+    - "Tutorial 4: Flexible Molecule": tutorials/flexible.md
+    - "Tutorial 5: PXRD-Assisted Search": tutorials/pxrd-assisted.md
+    - "Tutorial 6: Post-Analysis": tutorials/post-analysis.md
+    - "Tutorial 7: CSP Landscape Viewer": tutorials/csp-viewer.md
   - Reference:
     - reference/index.md
     - Configuration Reference: reference/config-reference.md

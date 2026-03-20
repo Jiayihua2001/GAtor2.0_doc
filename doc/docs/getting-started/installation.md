@@ -6,7 +6,7 @@ This guide walks through setting up GAtor on an HPC system with GPU support.
 
 - **Conda** (Miniconda or Anaconda)
 - **SWIG** (for compiling C extensions)
-- **MPI compiler** (`mpicc`) if using MPI parallelization
+- **MPI compiler** (`mpicc` / `mpiicc`) if using MPI parallelization
 - **CUDA** (optional, for GPU-accelerated MLIPs)
 
 ---
@@ -14,28 +14,32 @@ This guide walks through setting up GAtor on an HPC system with GPU support.
 ## Step 1: Create a Conda Environment
 
 ```bash
-conda create -n gator python=3.9 swig -y
+conda create -n gator python=3.9 swig numpy -y
 conda activate gator
 ```
 
-!!! tip "Python Version"
-    GAtor requires Python 3.9 or later. Python 3.10–3.11 is recommended.
+!!! tip "Faster alternative: mamba"
+    You can use [`mamba`](https://mamba.readthedocs.io) as a faster drop-in replacement for `conda`:
+    ```bash
+    mamba create -n gator python=3.9 swig numpy -y
+    mamba activate gator
+    ```
 
-## Step 2: Install MPI Support (Optional)
+## Step 2: Install MPI Support
 
-If you plan to use MPI parallelization, install `mpi4py` after loading your system's MPI module:
+Load your system's MPI module, then install `mpi4py`:
 
 ```bash
 # Load the MPI module (system-specific)
-module load cray-mpich   # Example for Cray systems
+module load cray-mpich   # Cray systems (e.g., Perlmutter)
 # or: module load openmpi
 
 # Install mpi4py with your MPI compiler
-MPICC="$(which mpicc)" pip install mpi4py
+MPICC=$(which mpiicc) pip install mpi4py==3.1.6
 ```
 
 !!! warning "MPI Consistency"
-    Ensure that `mpi4py`, your MPI library, and your DFT code (if applicable) all use the **same MPI implementation** (e.g., all use Cray MPICH or all use OpenMPI).
+    Ensure that `mpi4py`, your MPI library, and your DFT code (if applicable) all use the **same MPI implementation** (e.g., all use Cray MPICH or all use OpenMPI). See the [mpi4py documentation](https://mpi4py.readthedocs.io/en/stable/install.html) for details.
 
 ## Step 3: Clone GAtor
 
@@ -44,13 +48,13 @@ git clone https://github.com/Jiayihua2001/GAtor.git
 cd GAtor
 ```
 
-## Step 4: Get the PyGenarris Submodule
+## Step 4: Get the CGenarris Submodule
 
-PyGenarris is the C extension for random crystal structure generation:
+CGenarris is the C extension for random crystal structure generation:
 
 ```bash
 cd gator/
-git clone https://github.com/Yi5817/cgenarris.git
+git clone https://github.com/Yi5817/cgenarris_dev.git cgenarris
 cd ..
 ```
 
@@ -58,83 +62,64 @@ cd ..
 
 ```bash
 # Install GAtor in editable mode
-pip install -e .
+pip install -e . --no-build-isolation
 
 # Install the rpack subpackage
 cd gator/cgenarris/src/rpack
-pip install -e .
+pip install -e . --no-build-isolation
 cd ../../../..
 ```
 
-## Step 6: Install IBSLib
+## Step 6: Install Energy Calculators
 
-IBSLib provides structure I/O and dimer analysis utilities:
+GAtor supports various energy calculators through the [ASE Calculator](https://wiki.fysik.dtu.dk/ase/) interface. Install the one(s) you need:
 
-```bash
-cd ibslib/
-pip install -e .
-cd ..
-```
-
-## Step 7: Install Additional Dependencies
-
-Depending on your optimization backend, install the appropriate packages:
-
-=== "MACE (Recommended)"
+=== "UMA (FAIRChem) — Recommended"
 
     ```bash
-    pip install mace-torch
+    pip install -e .[uma] --no-build-isolation
     ```
 
-=== "UMA (FAIRChem)"
+    !!! warning "HuggingFace Access"
+        UMA models are gated. You need a HuggingFace account with access to the [UMA model repository](https://huggingface.co/facebook/UMA). Set `HF_HUB_OFFLINE=1` on compute nodes to avoid download attempts.
+
+=== "MACE"
 
     ```bash
-    pip install fairchem-core
+    pip install -e .[mace] --no-build-isolation
     ```
 
 === "AIMNet2"
 
     ```bash
-    pip install aimnet2calc
+    pip install -e .[aimnet2] --no-build-isolation
     ```
 
-=== "FHI-aims / VASP"
+=== "FHI-aims / VASP (DFT)"
 
-    No additional Python packages required — just ensure the executable is accessible on your HPC system.
+    No additional Python packages required — just ensure the executable is accessible on your HPC system. See `examples/00_setup/calculator.conf` for detailed calculator configuration.
 
-## Step 8: Set Environment Variables
+!!! tip "Calculator Configuration Reference"
+    See [`examples/00_setup/calculator.conf`](https://github.com/Jiayihua2001/GAtor/blob/main/examples/00_setup/calculator.conf) for detailed settings for each calculator backend.
 
-Add the following to your shell configuration or job submission script:
+### Optional: critic2 (for PXRD Fitness)
 
-```bash
-export PYTHONPATH="${PYTHONPATH}:/path/to/GAtor/ibslib"
-```
-
-### Optional: critic2 (for PXRD fitness)
-
-If using powder X-ray diffraction (PXRD) similarity as a fitness function (VC-PWDF metric), you need to build and install [critic2](https://aoterodelaroza.github.io/critic2/):
+If using powder X-ray diffraction (PXRD) similarity as a fitness function (VC-PWDF metric), build and install [critic2](https://aoterodelaroza.github.io/critic2/):
 
 ```bash
-# Clone critic2
 git clone https://github.com/aoterodelaroza/critic2.git
 cd critic2
-
-# Build with CMake
 mkdir build && cd build
 cmake ..
 make -j$(nproc)
-
-# Verify the build
-./src/critic2 --help
 cd ../..
 ```
 
-Add critic2 to your PATH permanently:
+Add critic2 to your PATH:
 
 ```bash
-# Add to your ~/.bashrc or ~/.bash_profile
-echo 'export PATH="/path/to/critic2/build/src:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+export CRITIC_HOME=/path/to/critic2
+export PATH="$CRITIC_HOME/build/src:$PATH"
 ```
 
 !!! tip "NERSC Users"
@@ -143,7 +128,7 @@ source ~/.bashrc
 ??? question "critic2 build fails with missing Fortran compiler"
     critic2 requires a Fortran compiler. Load one with `module load gcc` or `module load PrgEnv-gnu` before building.
 
-### Optional: RDKit (for conformer generation)
+### Optional: RDKit (for Conformer Generation)
 
 If using flexible molecule mode, RDKit is useful for generating conformer pools:
 
@@ -156,9 +141,16 @@ conda install -c conda-forge rdkit
 ## Verify Installation
 
 ```bash
+# Core package
 python -c "import gator; print('GAtor imported successfully')"
 python -c "from gator.structures.structure import Structure; print('Structure module OK')"
+
+# Calculator backends (check the ones you installed)
+python -c "from fairchem.core import OCPCalculator; print('UMA available')"
 python -c "from mace.calculators import mace_off; print('MACE available')"
+
+# CGenarris
+python -c "import pygenarris; print('CGenarris available')"
 ```
 
 !!! success "You're ready!"
@@ -169,10 +161,13 @@ python -c "from mace.calculators import mace_off; print('MACE available')"
 ## Troubleshooting
 
 ??? question "ImportError: No module named 'gator'"
-    Make sure you installed GAtor in editable mode (`pip install -e .`) from the repository root, and that your Conda environment is activated.
+    Make sure you installed GAtor in editable mode (`pip install -e . --no-build-isolation`) from the repository root, and that your Conda environment is activated.
 
 ??? question "MPI compiler not found during setup"
-    The `setup.py` requires `mpicc` to be in your PATH. Load your MPI module first: `module load cray-mpich` (or equivalent).
+    The build requires `mpicc` to be in your PATH. Load your MPI module first: `module load cray-mpich` (or equivalent).
 
 ??? question "CUDA out of memory with MACE/UMA"
     Reduce `replicas_per_node` in `[parallel_settings]`, or set `run_on_gpu = FALSE` to use CPU.
+
+??? question "CGenarris import fails"
+    Ensure you cloned the correct repository (`cgenarris_dev.git`) into the `gator/` directory, and installed both the main package and the `rpack` subpackage with `--no-build-isolation`.

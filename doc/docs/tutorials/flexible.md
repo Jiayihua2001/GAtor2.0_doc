@@ -1,46 +1,79 @@
-# Tutorial 3: Flexible Molecule
+# Tutorial 4: Flexible Molecule
 
-This tutorial covers crystal structure prediction for molecules with conformational flexibility, such as pharmaceuticals with rotatable bonds.
+This tutorial covers crystal structure prediction for **UJIRIO** — a molecule with rotatable bonds, using conformer-aware mutations and torsion angle blending.
 
 ---
 
 ## Scenario
 
-- **System**: A flexible organic molecule with rotatable bonds
+- **System**: UJIRIO — semi-flexible organic with rotatable bonds
 - **Z = 4**: 4 molecules per unit cell
-- **Backend**: MACE on GPU
-- **Conformers**: Pre-computed set of molecular conformers
-- **Cluster**: NERSC Perlmutter (adapt for your system)
+- **Backend**: UMA on GPU
+- **Conformers**: Pre-computed conformer pool (`conformers.json`)
 
-## What You Need
+## Files
 
-| File | Description | Required? |
-|------|-------------|-----------|
-| `structures.json` | Initial crystal structures (ASE JSON) | Yes |
-| `conformer.json` | Pre-computed molecular conformers | Yes |
-| `ui.conf` | Configuration file | Yes |
-| `submit_gpu.sh` | SLURM submission script | Yes |
+The ready-to-run example is in `examples/04_flexible/UJIRIO/`:
+
+```
+04_flexible/
+└── UJIRIO/
+    ├── ui.conf              # Flexible molecule configuration
+    ├── submit.sh            # SLURM submit script (GPU)
+    ├── structures.json      # Pre-generated initial pool
+    └── conformers.json      # Pre-computed conformer pool
+```
+
+## What Makes Flexible Different
+
+Rigid CSP searches over crystal packing only. Flexible CSP simultaneously explores **molecular conformation** and packing via:
+
+1. **Conformer pool** (`conformers.json`) — pre-computed low-energy geometries
+2. **Conformer swap mutations** — replace molecular geometry with a different conformer
+3. **Torsion angle mutations** — perturb individual rotatable bonds
+4. **Torsion blending in crossover** — interpolate parent torsion angles
+
+| Setting | Rigid | Flexible |
+|---|---|---|
+| `flexible` | `FALSE` | `TRUE` |
+| `[conformer]` section | Not needed | Required |
+| `crossover_probability` | 0.25 | **0.75** |
+| `stand_dev_trans` | 0.3 | 0.3 |
+| Mutation types | Translation, rotation, strain | + Conformer swap, torsion angle |
+
+!!! note "Higher Crossover Probability"
+    `crossover_probability = 0.75` is recommended for flexible molecules because crossover blends torsion angles — the primary mechanism for discovering new conformations in a crystal packing context.
 
 ## Step 1: Prepare the Conformer Pool
 
-The conformer pool is a set of molecular geometries representing distinct low-energy conformations. GAtor uses this pool for **conformer mutation** (swapping the molecular shape in a crystal) and **torsion angle crossover** (blending dihedral angles between parents).
+The conformer pool is a set of molecular geometries representing distinct low-energy conformations. GAtor uses this pool for **conformer mutation** and **torsion angle crossover**.
 
-=== "Using RDKit (Recommended)"
+=== "Using RDKit"
 
-    GAtor provides a helper script at `example/flexible/prepare_conformers.py`:
+    ```python
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+    from ase.io.jsonio import encode
+    from ase import Atoms
+    import json
 
-    ```bash
-    # From an SDF file containing your molecule
-    python /path/to/GAtor/example/flexible/prepare_conformers.py molecule.sdf \
-        --num_conformers 200 \
-        --output conformer.json
+    mol = Chem.MolFromMolFile("molecule.sdf")
+    mol = Chem.AddHs(mol)
+    AllChem.EmbedMultipleConfs(mol, numConfs=200, pruneRmsThresh=0.5)
+    AllChem.MMFFOptimizeMoleculeConfs(mol)
+
+    conformers = {}
+    for i, conf in enumerate(mol.GetConformers()):
+        pos = conf.GetPositions()
+        symbols = [atom.GetSymbol() for atom in mol.GetAtoms()]
+        atoms = Atoms(symbols=symbols, positions=pos)
+        conformers[f"conf_{i:03d}"] = encode(atoms)
+
+    with open("conformers.json", "w") as f:
+        json.dump(conformers, f)
     ```
 
-    This uses RDKit's ETKDG method to generate diverse 3D conformers.
-
 === "Using CREST"
-
-    Run CREST for conformer sampling, then convert to GAtor format:
 
     ```python
     from ase.io import read
@@ -52,60 +85,36 @@ The conformer pool is a set of molecular geometries representing distinct low-en
     for i, atoms in enumerate(atoms_list):
         conformers[f"conf_{i:03d}"] = encode(atoms)
 
-    with open("conformer.json", "w") as f:
+    with open("conformers.json", "w") as f:
         json.dump(conformers, f)
     ```
 
-=== "Manual Conversion"
+=== "Pre-computed (UJIRIO)"
 
-    Convert any set of molecular geometries (XYZ, SDF, etc.):
-
-    ```python
-    from ase.io import read
-    from ase.io.jsonio import encode
-    import json, glob
-
-    conformers = {}
-    for i, xyz_file in enumerate(sorted(glob.glob("conformers/*.xyz"))):
-        atoms = read(xyz_file)
-        conformers[f"conf_{i:03d}"] = encode(atoms)
-
-    with open("conformer.json", "w") as f:
-        json.dump(conformers, f)
-    ```
-
-!!! important "Conformer Energies"
-    GAtor will **re-compute** conformer energies using the configured optimization module (MACE in this case) during pool preparation. This ensures consistency between crystal and molecular energies. You do not need to pre-compute energies.
+    A pre-computed `conformers.json` is included in the example for UJIRIO — no preparation needed.
 
 !!! tip "How Many Conformers?"
-    Aim for **50–200 conformers** covering distinct torsion angle combinations. GAtor de-duplicates conformers using the `rmsd_threshold` parameter, so it's better to over-generate.
+    **20–50 conformers** covering distinct torsion angle combinations is usually sufficient. GAtor de-duplicates using RMSD, so it's better to over-generate.
 
 ## Step 2: Prepare Initial Structures
 
-Prepare `structures.json` as described in the [Quick Start](../getting-started/quickstart.md#generating-structuresjson). The same methods work for flexible molecules.
+Prepare `structures.json` as described in [Tutorial 1](setup.md):
 
 ```bash
-python /path/to/GAtor/example/prepare_structures.py /path/to/cif_directory \
+python examples/01_prepare/prepare_structures.py /path/to/cif_directory \
     --output structures.json
 ```
 
-## Step 3: Write Configuration
-
-Create `ui.conf`. A complete example is available at `example/flexible/ui.conf`:
+## Step 3: Configuration Walkthrough
 
 ```ini
-# ==============================================================================
-# GAtor 2.0: Flexible Molecule CSP with MACE
-# ==============================================================================
-
 [GAtor_master]
 fill_initial_pool = TRUE
 run_ga = TRUE
 
 [modules]
 initial_pool_module = IP_filling
-optimization_module = MACE
-spe_module = MACE
+optimization_module = UMA
 comparison_module = structure_comparison
 selection_module = Adaptive_tournament_selection
 mutation_module = standard_mutation
@@ -118,32 +127,35 @@ energy_name = energy
 
 [initial_pool]
 user_structures_dir = initial_pool
-stored_energy_name = mace_lbfgs
+stored_energy_name = uma_lbfgs
 prepare_initial_pool = TRUE
+
+[conformer]
+# Pre-computed conformer pool
+pre_calc_conformer_json_name = conformers.json
+# Boltzmann factor for conformer selection (higher = flatter distribution)
+boltzmann_scale_factor = 1
+# Selection type: 'mean_fitness' weights conformer choice by pool energy
+conformer_selection_type = mean_fitness
+# Volume multiplier for conformer-based unit cell estimation
+volume_mult = 1.2
 
 [run_settings]
 num_molecules = 4
-flexible = TRUE
-end_ga_structures_added = 1000
+flexible = TRUE                      # Enable conformer-aware operators
+end_ga_structures_added = 500
 output_all_geometries = TRUE
-restart_replicas = TRUE
-
-# --- Conformer Settings ---
-[conformer]
-pre_calc_conformer_json_name = conformer.json
-rmsd_threshold = 1.5
 
 [parallel_settings]
 parallelization_method = srun
 run_on_gpu = TRUE
 replicas_per_node = 4
-processes_per_replica = 1
-python_command = python
 
-[MACE]
-store_energy_names = mace mace_lbfgs
-relative_energy_thresholds = 3 3
-reject_if_worst_energy = TRUE TRUE
+[UMA]
+store_energy_names = uma uma_lbfgs
+# Generous first threshold — flexible molecules have large energy spread before relaxation
+relative_energy_thresholds = 1000 3
+reject_if_worst_energy = FALSE FALSE
 fmax = 0.01
 steps = 1500
 save_trajectory = FALSE
@@ -152,26 +164,22 @@ save_trajectory = FALSE
 tournament_size = 10
 
 [crossover]
+# Higher crossover probability for flexible molecules!
+# Crossover blends torsion angles — the primary way the GA discovers
+# new conformations in a crystal packing context.
 crossover_probability = 0.75
-# Torsion angle blending during crossover
-blend_torsion_prob = 0.5
 
 [mutation]
-stand_dev_trans = 3.0
+# Smaller translation perturbation — conformational degrees of freedom
+# already provide ample diversity
+stand_dev_trans = 0.3
 stand_dev_rot = 30
 stand_dev_strain = 0.3
-# Conformer and torsion mutations are automatically included
-# when flexible = TRUE. Categories:
-#   Translation/Rotation, Permutation/Block, Strain, Conformer
-# Conformer category weight is 0.1 by default
 
 [cell_check_settings]
-# Set target_volume based on your molecule's vdW volume * Z
-# target_volume = 1800
 volume_upper_ratio = 1.4
 volume_lower_ratio = 0.6
-specific_radius_proportion = 0.65
-full_atomic_distance_check = 0.1
+specific_radius_proportion = 0.79    # From pool analysis for UJIRIO
 
 [pre_relaxation_comparison]
 ltol = .5
@@ -192,61 +200,25 @@ feature_vector = RSF
 ### Key Flexible-Specific Settings
 
 | Setting | Section | Description |
-|---------|---------|-------------|
+|---|---|---|
 | `flexible = TRUE` | `[run_settings]` | Enables conformer-aware operators |
 | `pre_calc_conformer_json_name` | `[conformer]` | Path to conformer pool file |
-| `rmsd_threshold` | `[conformer]` | RMSD threshold (A) for conformer deduplication |
-| `blend_torsion_prob` | `[crossover]` | Probability of torsion angle blending in crossover |
+| `boltzmann_scale_factor` | `[conformer]` | Controls diversity of conformer selection |
+| `conformer_selection_type` | `[conformer]` | How conformers are selected for mutation |
+| `volume_mult` | `[conformer]` | Volume multiplier for cell estimation |
+| `crossover_probability = 0.75` | `[crossover]` | Higher than rigid (torsion blending) |
 
-## Step 4: Write SLURM Script
-
-Create `submit_gpu.sh` (see `example/flexible/submit_gpu.sh`):
-
-```bash
-#!/bin/bash
-#SBATCH -N 1
-#SBATCH --time=04:00:00
-#SBATCH -C gpu
-#SBATCH --gpus-per-node=4
-#SBATCH -q regular
-#SBATCH -A your_account
-#SBATCH -J gator_flexible
-#SBATCH -o gator_%j.out
-#SBATCH -e gator_%j.err
-
-ulimit -s unlimited
-ulimit -v unlimited
-
-conda activate gator
-python /path/to/GAtor/gator/GAtor_master.py ui.conf
-```
-
-## Step 5: Submit and Monitor
-
-```bash
-sbatch submit_gpu.sh
-
-# Monitor progress
-tail -f GAtor.log
-
-# Check energy hierarchy
-cat tmp/energy_hierarchy_*.dat
-```
-
-## Step 6: Analyze Results
+## Analyzing Results
 
 During initial pool preparation, GAtor will:
 
-1. Optimize each crystal structure with MACE
-2. Re-compute conformer energies with MACE for consistency
+1. Optimize each crystal structure with UMA
+2. Re-compute conformer energies for consistency
 3. Deduplicate conformers using RMSD
 4. Assign conformer IDs to each molecule in each crystal
 5. Save the deduplicated conformer pool to `unique_mol_dict.json`
 
 Each structure in the pool tracks its conformer assignments:
-
-- `conformer_0_ID` — ID of the assigned conformer for molecule 0
-- `conformer_0_energy` — Intramolecular energy of that conformer
 
 ```bash
 # View the conformer pool
@@ -260,8 +232,6 @@ print(f'Unique conformers: {len(pool)}')
 # View ranked structures
 head -20 tmp/energy_hierarchy_*.dat
 ```
-
----
 
 ## Flexible Cocrystal
 
@@ -285,11 +255,21 @@ Where `conformer_0.json` contains conformers for molecule type A and `conformer_
 
 ## Tips
 
-!!! tip "Conformer Selection"
-    GAtor uses **Boltzmann-weighted selection** by default when choosing conformers for mutation. Lower-energy conformers are preferred, but higher-energy ones are still sampled to maintain diversity.
+!!! tip "Conformer Diversity"
+    GAtor uses **Boltzmann-weighted selection** when choosing conformers for mutation. Lower-energy conformers are preferred, but higher-energy ones are still sampled. Increase `boltzmann_scale_factor` for a flatter distribution.
 
 !!! tip "Torsion Angle Crossover"
-    The `blend_torsion_prob` parameter controls how often torsion angles are blended (vs. swapped) during crossover. Higher values (0.5–0.8) work well for molecules with many rotatable bonds.
+    During crossover, torsion angles from both parents are blended to create offspring with intermediate conformations. This is controlled by `crossover_probability`.
+
+!!! tip "Very Flexible Molecules"
+    For molecules with many rotatable bonds, consider using CREST for thorough conformer sampling (100–200 conformers).
 
 !!! tip "Restart"
-    If the job times out, resubmit with `restart_replicas = TRUE`. GAtor continues from the existing pool. The conformer pool (`unique_mol_dict.json`) is also preserved.
+    If the job times out, resubmit — GAtor continues from the existing pool. The conformer pool (`unique_mol_dict.json`) is preserved.
+
+---
+
+## Next Steps
+
+- [Tutorial 5: PXRD-Assisted Search](pxrd-assisted.md) — Add PXRD guidance
+- [Tutorial 6: Post-Analysis](post-analysis.md) — Analyze results
