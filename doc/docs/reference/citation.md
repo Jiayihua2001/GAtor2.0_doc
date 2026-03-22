@@ -1,8 +1,18 @@
 # Citation
 
-## Primary Reference
+## GAtor 2.0
 
-If you use GAtor in your research, please cite:
+GAtor 2.0: Genetic Algorithm for Crystal Structure Prediction of Molecular Co-Crystals and Semi-Flexible Crystals.
+
+**Authors:** Jiayi Huang and Noa Marom
+
+*Citation information will be updated upon publication.*
+
+---
+
+## GAtor 1.0
+
+If you use GAtor in your research, please cite the original paper:
 
 > F. Curtis, X. Li, T. Rose, A. Vazquez-Mayagoitia, S. Bhattacharya, L. M. Ghiringhelli, and N. Marom,
 > **"GAtor: A First-Principles Genetic Algorithm for Molecular Crystal Structure Prediction"**,

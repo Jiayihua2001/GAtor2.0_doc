@@ -1,10 +1,16 @@
-# GAtor
+# GAtor 2.0
 
 <p align="center">
   <img src="assets/images/ga.png" alt="GAtor Logo" width="300">
 </p>
 
 **A First-Principles Genetic Algorithm for Molecular Crystal Structure Prediction**
+
+<p align="center">
+  <a href="https://github.com/Jiayihua2001/GAtor" class="md-button">
+    GitHub Repository
+  </a>
+</p>
 
 <p align="center">
   <img src="assets/images/innovation.png" alt="GAtor 1.0 to 2.0" width="600">
@@ -19,14 +25,13 @@ GAtor is an open-source genetic algorithm (GA) for predicting the crystal struct
 <p align="center">
   <img src="assets/images/GAtor2_target.png" alt="GAtor Target Systems" width="500">
 </p>
-<p align="center"><em>Validated on a diverse set of molecular crystal systems.</em></p>
 
 ### Key Features
 
 <div class="grid cards" markdown>
 
 - **Fast MLIP Screening** — UMA, MACE, AIMNet2 on GPU (~30 min for 300 generations)
-- **DFT Backends** — FHI-aims and VASP for production-quality results
+- **DFT Backends** — FHI-aims (all-electron) and VASP for production-quality results
 - **Cocrystals & Flexible Molecules** — Multi-component and conformer-aware operators
 - **PXRD-Guided Search** — Combine energy with experimental diffraction data (VC-PWDF)
 - **45+ Mutation Operators** — Hierarchical selection across translation, rotation, strain, block, and conformer categories
@@ -61,9 +66,23 @@ Or jump to a specific tutorial:
 
 ---
 
-## Citation
+## Version History
 
-If you use GAtor in your research, please cite:
+### GAtor 2.0
+
+Genetic Algorithm for Crystal Structure Prediction of Molecular Co-Crystals and Semi-Flexible Crystals.
+
+**New in 2.0:**
+
+- Co-crystal support with ASU partner swap operators
+- Flexible molecule handling with conformer-aware mutations
+- MLIP backends (UMA, MACE, AIMNet2) for GPU-accelerated screening
+- PXRD-assisted fitness with VC-PWDF metric
+- Asynchronous parallel architecture with multi-replica scaling
+
+### GAtor 1.0
+
+The original first-principles genetic algorithm for molecular crystal structure prediction.
 
 > F. Curtis, X. Li, T. Rose, A. Vazquez-Mayagoitia, S. Bhattacharya, L. M. Ghiringhelli, and N. Marom,
 > "GAtor: A First-Principles Genetic Algorithm for Molecular Crystal Structure Prediction",
@@ -71,6 +90,19 @@ If you use GAtor in your research, please cite:
 
 ---
 
-**Original authors:** Farren Curtis, Xiayue Li, Timothy Rose, Alvaro Vazquez-Mayagoitia, Saswata Bhattacharya, Luca M. Ghiringhelli, and Noa Marom
-**GAtor 2.0 developer and maintainer:** Jiayi Huang (jiayihua@andrew.cmu.edu)
+## People
+
+**GAtor 2.0 developer and maintainer:** Jiayi Huang
+
+**GAtor 1.0 authors:** Farren Curtis, Xiayue Li, Timothy Rose, Alvaro Vazquez-Mayagoitia, Saswata Bhattacharya, Luca M. Ghiringhelli, and Noa Marom
+
 **PI:** Noa Marom, Carnegie Mellon University
+
+---
+
+## Contact
+
+For questions, bug reports, or feature requests:
+
+- **Email:** Jiayi Huang — [jiayihua@andrew.cmu.edu](mailto:jiayihua@andrew.cmu.edu)
+- **GitHub Issues:** [github.com/Jiayihua2001/GAtor/issues](https://github.com/Jiayihua2001/GAtor/issues)

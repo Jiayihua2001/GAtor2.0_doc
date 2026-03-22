@@ -279,23 +279,27 @@ Same options as `[MACE]`, plus:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `execute_command` | string | *required* | `srun` or `mpirun` |
-| `path_to_aims_executable` | string | *required* | Path to aims binary |
-| `control_in_directory` | string | *required* | Control files directory |
-| `control_in_filelist` | list | *required* | Control file names |
+| `path_to_aims_executable` | string | *required* | Path to FHI-aims binary |
+| `aims_settings_path` | string | *required* | Path to `aims.json` with DFT settings |
+| `k_density` | int | `25` | k-point density for Brillouin zone sampling |
+| `fmax` | float | `0.01` | Force convergence criterion (eV/A) |
+| `steps` | int | `100` | Maximum geometry optimization steps |
 | `store_energy_names` | list | *required* | Energy property names |
 | `relative_energy_thresholds` | list[float] | `None` | Energy cutoffs per step |
 | `reject_if_worst_energy` | list[bool] | `FALSE` | Reject worst energy |
 | `save_failed_calc` | bool | `TRUE` | Save failed calculations |
-| `save_successful_calc` | bool | `TRUE` | Save successful calculations |
-| `save_aims_output` | bool | `TRUE` | Keep aims output files |
-| `monitor_execution` | bool | `FALSE` | Monitor job progress |
-| `update_poll_times` | list[int] | `1200` | Timeout per step (seconds) |
 
 ### `[VASP]`
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `execute_command` | string | `srun` | `srun` or `mpirun` |
+| `ncore` | int | `128` | Number of CPUs per replica |
 | `path_to_vasp_executable` | string | *required* | Path to VASP binary |
+| `energy_settings_path` | string | *required* | Path to `vasp.json` with INCAR parameters |
+| `pp_setups` | string | `minimal` | Pseudopotential setup |
 | `store_energy_names` | list | *required* | Energy property names |
 | `relative_energy_thresholds` | list[float] | `None` | Energy cutoffs |
 | `reject_if_worst_energy` | list[bool] | `FALSE` | Reject worst energy |
+| `fmax` | float | `0.01` | Force convergence criterion (eV/A) |
+| `steps` | int | `100` | Maximum optimization steps |

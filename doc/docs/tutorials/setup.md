@@ -11,7 +11,7 @@ Choose a calculator, configure parallelization, prepare initial structures, and 
 | **UMA** | MLIP | ~30 min | GPU | `pip install -e .[uma] --no-build-isolation` |
 | **MACE** | MLIP | ~30 min | GPU | `pip install -e .[mace] --no-build-isolation` |
 | **AIMNet2** | MLIP | ~30 min | GPU | `pip install -e .[aimnet2] --no-build-isolation` |
-| **FHI-aims** | DFT | 1–5 hours | CPU | External binary |
+| **FHI-aims** | DFT (all-electron) | 1–5 hours | CPU | External binary |
 | **VASP** | DFT | 1–5 hours | CPU | External binary |
 
 !!! tip "Recommendation"
