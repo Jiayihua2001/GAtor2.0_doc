@@ -1,6 +1,6 @@
-site_name: GAtor 2.0
+site_name: GAtor
 site_description: "A First-Principles Genetic Algorithm for Molecular Crystal Structure Prediction"
-site_author: "Jiayi Huang, Farren Curtis, Xiayue Li, Timothy Rose"
+site_author: "Jiayi Huang, Noa Marom"
 repo_url: https://github.com/Jiayihua2001/GAtor
 repo_name: GAtor
 copyright: "Copyright &copy; 2018-2026 Carnegie Mellon University"
